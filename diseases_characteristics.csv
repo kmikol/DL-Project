@@ -1,0 +1,7 @@
+,scale,plaque,papule,pustule,patch,dermatoglyph_disruption,open_comedo,area
+actinic_keratosis,1,1,0,0,1,0,0,exposed_areas
+acne,0,0,1,1,0,0,1,seborrheic_region
+psoriasis,1,1,1,0,0,0,0,extensor_sites
+seborrheic_dermatitis,1,1,0,0,1,0,0,seborrheic_region
+viral_warts,0,1,1,0,0,1,0,acral_distribution
+vitiligo,0,0,0,0,1,0,0,acral_distribution
