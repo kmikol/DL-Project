@@ -79,7 +79,12 @@ def splitData(data,train,test,val,seed=0):
     test_set = deepcopy(data)
     val_set = deepcopy(data)
     
-    rand_idx = np.random.choice(3,len(data),p=[train,test,val])
+   if seed is not None:
+        np.random.seed(seed)
+        rand_idx = np.random.choice(3,len(data),p=[train,test,val])
+    else:
+        rand_idx = np.random.choice(3,len(data),p=[train,test,val])
+    
     
     if train!=0.0:
         train_set.data = train_set.data.loc[rand_idx==0]
