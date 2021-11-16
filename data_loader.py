@@ -17,14 +17,14 @@ import numpy as np
 from torchvision import transforms
 
 
-
 class Loader(torch.utils.data.Dataset):
     
     
     def __init__(self, img_size, img_path ,transform = None):
         
         
-        self.data = pd.read_csv('dermx_labels_filtered.csv',delimiter=',')
+        #self.data = pd.read_csv('dermx_labels_filtered.csv',delimiter=',')
+        self.data = pd.read_csv('C:\\Users\\Micha\\OneDrive\\Dokumenter\\GitHub\\DL-Project\\dermx_labels_filtered.csv',delimiter=',')
         self.transform = transform
         self.img_size = img_size
         self.img_path = img_path
@@ -79,7 +79,7 @@ def splitData(data,train,test,val,seed=0):
     test_set = deepcopy(data)
     val_set = deepcopy(data)
     
-   if seed is not None:
+    if seed is not None:
         np.random.seed(seed)
         rand_idx = np.random.choice(3,len(data),p=[train,test,val])
     else:
@@ -106,5 +106,36 @@ def splitData(data,train,test,val,seed=0):
     
     return train_set, test_set, val_set
     
+#%%
+def get_diagnosis_with_feature(path,feature_order,diagnosis_order):
+    data = pd.read_csv((path+'./diseases_characteristics.csv'),delimiter=',',index_col=0)
+    # Diagosis as row, characteristics as column    '
+    diag_fetures = []
+    
+    for diag in diagnosis_order:
+        temp_list = []
+        for item in feature_order:
+     
+            temp_list.append(int(data[item][diag]))
+        diag_fetures.append(temp_list)
+         
+    return torch.FloatTensor(diag_fetures)
 
 
+
+# For Hinge
+def get_diagnosis_with_feature2(path,feature_order,diagnosis_order):
+    data = pd.read_csv((path+'./diseases_characteristics.csv'),delimiter=',',index_col=0)
+    # Diagosis as row, characteristics as column    '
+    diag_fetures = []
+    
+    for diag in diagnosis_order:
+        temp_list = []
+        for item in feature_order:
+            if int(data[item][diag]) == 0: 
+                temp_list.append(-1)
+            else:
+                temp_list.append(int(data[item][diag]))
+        diag_fetures.append(temp_list)
+         
+    return torch.FloatTensor(diag_fetures) 

@@ -17,12 +17,16 @@ from copy import copy
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f'The model will run on: {device}')
 
+import os
+os.environ["KMP_DUPLICATE_LIB_OK"]="TRUE"
 
 
 #%% Load data and split it to tran,test and val sets
 from data_loader import Loader, splitData
+#%%
+#img_path = "C:\\Users\\Kamil\\OneDrive - Danmarks Tekniske Universitet\\DTU_courses\\Deep_Learning\\project\\images\\"
+img_path = "C:\\Users\\Micha\\OneDrive\\DTU -Kandidat\\3_Semester\\Deep\\images\\"
 
-img_path = "C:\\Users\\Kamil\\OneDrive - Danmarks Tekniske Universitet\\DTU_courses\\Deep_Learning\\project\\images\\"
 
 data = Loader(img_size=[224,224],img_path=img_path)
 train_set,test_set,val_set = splitData(data,0.6,0.2,0.2,seed=0)
@@ -66,6 +70,13 @@ for key in train_set.data.keys()[3:-1]:
 characteristic_weight = (1-characteristic_count/len(train_set)).to(device)
 
 characteristic_names = train_set.data.keys()[3:-1].tolist()
+
+#%%
+feature_order = ['scale','plaque','pustule','patch','papule','dermatoglyph_disruption','open_comedo']
+diagnosis_order =  ['acne', 'actinic_keratosis', 'psoriasis', 'seborrheic_dermatitis', 'viral_warts', 'vitiligo']
+  
+diagnosis_feature = get_diagnosis_with_feature(img_path,feature_order,diagnosis_order)
+
 
 #%% Set train set augmentation
 
@@ -121,7 +132,24 @@ class Model(torch.nn.Module):
         characteristic_enc = y[:,self.num_diagnosis:]
         
         return diagnosis_enc, characteristic_enc
-  
+
+    
+# Loss functions 
+
+def svm(y_hat,y,y_diagnosis,diagnosis_feature=diagnosis_feature):
+    p = torch.nn.Sigmoid()(torch.clip(y_hat,-10,10))
+    xBCE = torch.nn.BCELoss(reduce="mean")
+    loss = xBCE(p,diagnosis_feature[y_diagnosis])
+    #print(loss)
+
+    # Also considered HingeEmbeddingLoss or similar, not that good
+    #xHinge = HingeEmbeddingLoss(margin=1.0, size_average=None, reduce=None, reduction='mean')
+
+    loss = bce(y_hat,diagnosis_feature[y_diagnosis])
+    #print(loss)
+    return loss
+
+
 def bce(y_hat,y,weights = characteristic_weight ):
     p = torch.nn.Sigmoid()(torch.clip(y_hat,-10,10))
     loss = -torch.mean(characteristic_weight*y*torch.log(p) + (1-characteristic_weight)*(1-y)*torch.log(1-p))
@@ -141,16 +169,22 @@ def lossFunction(y_hat,y):
     xEntropy_loss = xEntropy(y_hat_diagnosis,y_diagnosis)
     bce_loss = bce(y_hat_characteristic,y_characteristic)
     
+    
+    
+    svm_loss = svm(y_hat_characteristic,y_characteristic,y_diagnosis)
+    
     if bce_loss<0:
         print(sigmoid(y_hat_characteristic))
         print(y_characteristic)
         print(bce_loss)
     
-    return xEntropy_loss, bce_loss
+    return xEntropy_loss, bce_loss, svm_loss
 
 model = Model(6,7)
 model.to(device)
 optimizer = torch.optim.Adam(model.parameters(), lr = 1e-3)
+
+
 
 
 
@@ -203,10 +237,13 @@ def train(model,train_set,test_set,lossFunction,optimizer,num_epochs=10,batch_si
             
             optimizer.zero_grad()
             y_hat = model(X)
-            xEntropy_loss, bce_loss = lossFunction(y_hat,y)
-            loss = xEntropy_loss + bce_loss
+            xEntropy_loss, bce_loss, svm_loss = lossFunction(y_hat,y)
+            loss = xEntropy_loss + bce_loss + svm_loss
             loss.backward()
             optimizer.step()
+
+     
+            
             
             train_loss += curr_batch_size * loss / N_train
             train_diagnosis_loss += curr_batch_size * xEntropy_loss / N_train
@@ -225,8 +262,8 @@ def train(model,train_set,test_set,lossFunction,optimizer,num_epochs=10,batch_si
                 curr_batch_size = disease.shape[0]
             
                 y_hat = model(X)
-                xEntropy_loss, bce_loss = lossFunction(y_hat,y)
-                loss = xEntropy_loss + bce_loss
+                xEntropy_loss, bce_loss, svm_loss = lossFunction(y_hat,y)
+                loss = xEntropy_loss + bce_loss + svm_loss
             
                 test_loss += curr_batch_size * loss / N_test
                 test_diagnosis_loss += curr_batch_size * xEntropy_loss / N_test
@@ -255,12 +292,13 @@ def train(model,train_set,test_set,lossFunction,optimizer,num_epochs=10,batch_si
 
 #%% Train the model
 history = train(model,train_set,test_set,lossFunction,optimizer,
-                    num_epochs=500,batch_size=16,num_workers=0,save_path='resnet18_3')
+                    num_epochs=50,batch_size=16,num_workers=0,save_path='resnet18_3')
 
 #%% Load pretrained model for evaluation
-model = torch.load('resnet18_2',map_location='cpu')
+model = torch.load('testher_1')
 model.eval()
 model.to(device)
+
 
 
 #%% Plot history
@@ -339,6 +377,7 @@ char_pred_b = char_pred>0.5
 import seaborn as sb
 import pandas as pd
 from sklearn.metrics import confusion_matrix
+from sklearn.metrics import classification_report
 
 conf_mat = confusion_matrix(diagnosis_true,diagnosis_pred)
 
@@ -356,6 +395,25 @@ char_acc = (char_true==char_pred_b).sum(0)/N
 plt.bar(characteristic_names,char_acc)
 plt.xticks(rotation=90)
 plt.show()
+
+
+# Get some more stats
+
+FP = (conf_mat.sum(axis=0) - np.diag(conf_mat)).astype(float)  
+FN = (conf_mat.sum(axis=1) - np.diag(conf_mat)).astype(float)
+TP = (np.diag(conf_mat)).astype(float)
+TN = (conf_mat.sum() - (FP + FN + TP)).astype(float)
+
+
+
+Sensitivity = TP/(TP+FN)
+Specificity = TN/(TN+FP) 
+
+Recall = (TP/(TP+FN)).astype(float)  
+Precision = (TP/(TP+FP)).astype(float)  
+
+F1score = 2* ((Precision*Recall)/(Precision+Recall))
+print(F1score)
 
 
 
@@ -483,6 +541,3 @@ for i in range(10):
     
     
 #%%
-
-for i in range(8):
-    print(bce(a_[i],b_[i]))
