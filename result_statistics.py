@@ -16,7 +16,7 @@ from data_loader import Loader
 import pandas as pd
 
 
-with open('results_char_weighted.pickle','rb') as handle:
+with open('results_50ep_weighted.pickle','rb') as handle:
     results = pickle.load(handle)
     
 test_results = results['test']
@@ -82,12 +82,12 @@ disease_characteristics_np = pd.read_csv('diseases_characteristics_sorted.csv',d
 
 modelNB_dc = BernoulliNB()
 modelNB_dc.fit(disease_characteristics_np[:,1:-1],disease_characteristics_np[:,0])
-print(f'Bayes Classifier (disease char. based) test score: {modelNB_dc.score(train_np[:,1:],train_np[:,0])}')
+print(f'Bayes Classifier (disease char. based) val score: {modelNB_dc.score(train_np[:,1:],train_np[:,0])}')
 
 
 modelNB = BernoulliNB()
 modelNB.fit(train_np[:,1:],train_np[:,0])
-print(f'Bayes Classifier (data based) test score: {modelNB.score(train_np[:,1:],train_np[:,0])}')
+print(f'Bayes Classifier (data based) val score: {modelNB.score(train_np[:,1:],train_np[:,0])}')
 
 correction_dict = {'model':modelNB,'alpha':0}
 
@@ -97,24 +97,42 @@ correction_dict = {'model':modelNB,'alpha':0}
 
 #%% Choose the best alpha parameter to combine predicted diagnosis and correction
 As = np.arange(0,1,0.01)
-accuracies = np.zeros(len(As))
+accuracies_test = np.zeros((len(As),10))
+accuracies_val = np.zeros((len(As),10))
 i=0
+
 for a in As:
     correction_dict['alpha']=a
 
-    diagnosis_acc, diagnosis_metrics, characteristic_metrics = processResults(test_results, correction_dict=correction_dict)
-    accuracies[i]=diagnosis_metrics[:,2].mean()
+    diagnosis_acc_test, _,_= processResults(test_results, correction_dict=correction_dict)
+    diagnosis_acc_val, _,_= processResults(val_results, correction_dict=correction_dict)
+    accuracies_test[i]=diagnosis_acc_test
+    accuracies_val[i]=diagnosis_acc_val
     i+=1
     
-plt.plot(As,accuracies)
+
+plt.figure(figsize=(4,4))
+plt.plot(As,accuracies_test.mean(1),label='Validation') 
+plt.plot(As,accuracies_val.mean(1),label='Test')
+plt.grid()
+plt.xlabel(r'$\alpha$')
+plt.ylabel('Accuracy')
+plt.title('Diagnosis Correction')
+plt.legend()
+plt.tight_layout()
+#plt.ylim([0.5,1])
+plt.savefig('figures/diagnosis_correction.eps')
 
 
 
+#%%
+correction_dict['alpha'] = As[np.argmax(accuracies_test.mean(0))]
+diagnosis_acc, diagnosis_metrics, characteristic_metrics = processResults(val_results, correction_dict=correction_dict)
 
 
 #%% Plot
 diagnosis_str = np.array(['Acne','Actinic Keratosis','Psoriasis','Seborrheic Dermatitis','Viral Warts','Vitiligo'])
-characteristic_str = ['Scale','Plaque','Pustule','Patch','Papule','Dermatoglyph Disruption','Open Comedo']
+characteristic_str = ['Scale','Plaque','Pustule','Patch','Papule','Derm. Disruption','Open Comedo']
 metric_str = ['Accuracy','Precision','Recall','F1 Score']
 
 print('Diagnosis Metric \n')
@@ -131,7 +149,7 @@ for i in range(1,4,1):
 print('Characteristic metrics \n')
 for i in range(0,4,1):
     print(f'{metric_str[i]}')
-    for j in range(6):
+    for j in range(7):
         print(f'{characteristic_str[j]}: \t {np.round(characteristic_metrics[:,i,j].mean(0),4)},  \
               std: {np.round(characteristic_metrics[:,i,j].std(0),4)}')
     print('\n')
@@ -148,9 +166,12 @@ for i in range(1,4,1):
     for j in range(len(diagnosis_str)):
         plt.scatter([diagnosis_str[j]]*diagnosis_metrics.shape[0],diagnosis_metrics[:,i-1,j],
                     marker='x',color='tab:Blue')        
-    plt.xticks(rotation=90)
+    plt.xticks(rotation=60)
     plt.title(metric_str[i])
     plt.grid()
+    plt.ylim([0.5,1])
+    plt.tight_layout()
+    plt.savefig(f'figures/diagnosis_{metric_str[i]}.eps')
 
 #%%
 for i in range(0,4,1):
@@ -160,31 +181,10 @@ for i in range(0,4,1):
     for j in range(len(characteristic_str)):
         plt.scatter([characteristic_str[j]]*characteristic_metrics.shape[0],characteristic_metrics[:,i,j],
                     marker='x',color='tab:Blue')
-    plt.xticks(rotation=90)
+    plt.xticks(rotation=60)
     plt.title(metric_str[i])
     plt.grid()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    plt.ylim([0.5,1])
+    plt.tight_layout()
+    plt.savefig(f'figures/characteristics_{metric_str[i]}.eps')
+    
