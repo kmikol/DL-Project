@@ -6,8 +6,6 @@ Created on Sun Nov 21 12:30:39 2021
 @author: s202818
 """
 
-
-
 import torch
 from torchvision import transforms, models
 from torch.utils.data import DataLoader
@@ -22,7 +20,7 @@ import pickle
 
 IMG_PATH = "images/"
 N_RUNS = 10
-NUM_EPOCHS = 250
+NUM_EPOCHS = 50
 
 train_transform = transforms.Compose([transforms.RandomHorizontalFlip(p=0.5),
                                       transforms.RandomAffine(degrees=(-180,180),
@@ -44,12 +42,13 @@ class Model(torch.nn.Module):
     def __init__(self,num_diagnosis,num_characteristics,base_model = 'efficientnet'):
         super(Model,self).__init__()
         
+        # Change the number next to model name to change size
         if base_model == 'densenet':
             model = models.densenet201(pretrained=True)
             model.classifier = torch.nn.Linear(model.classifier.in_features, num_diagnosis+num_characteristics)
         
         elif base_model == 'resnet':
-            model = models.resnet50(pretrained=True)
+            model = models.resnet34(pretrained=True)
             model.fc = torch.nn.Linear(model.fc.in_features, num_diagnosis+num_characteristics)
             
         elif base_model == 'efficientnet':
@@ -233,7 +232,7 @@ for i in range(N_RUNS):
     
     model = Model(6,7)
     model.to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr = 1e-3)
+    optimizer = torch.optim.Adam(model.parameters(), lr = 1e-4)
     
     train_set,test_set,val_set = splitData(data,0.6,0.2,0.2,seed=i)
     train_set.setTransform(train_transform)
@@ -256,14 +255,13 @@ for i in range(N_RUNS):
         characteristic_count[idx] = (train_set.data[key]>0).sum()
         idx+=1
     characteristic_weight = (1-characteristic_count/len(train_set)).to(device)
-    characteristic_weight = (torch.ones(7)*0.5).to(device)
+    #characteristic_weight = (torch.ones(7)*0.5).to(device)
     characteristic_names = train_set.data.keys()[3:-1].tolist()
     
     
     # Train the model
     history = train(model,train_set,test_set,lossFunction,optimizer,diagnosis_weight,characteristic_weight,
                         num_epochs=NUM_EPOCHS,batch_size=16,num_workers=8,save_path='temp_net')
-    
     
     # Load the best model
     model = torch.load('temp_net',map_location='cpu')
@@ -280,23 +278,6 @@ for i in range(N_RUNS):
     os.remove('temp_net')
     
     
-    
 # Save the evaluation file
-with open('results.pickle','wb') as handle:
+with open('results_50ep_weighted3.pickle','wb') as handle:
     pickle.dump(RESULTS,handle)
-
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
